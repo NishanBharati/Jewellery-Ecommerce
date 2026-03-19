@@ -1,17 +1,17 @@
-const express = require("express");
+import express from "express";
+import * as orderController from "./order.controller.js";
+import authMiddleware from "../../middleware/auth.middleware.js";
+import roleMiddleware from "../../middleware/role.middleware.js";
+import validate from "../../middleware/validate.middleware.js";
+import { createOrderSchema, updateOrderStatusSchema } from "./order.validator.js";
+
 const router = express.Router();
 
-const orderController = require("./order.controller");
-const authMiddleware = require("../../middlewares/auth.middleware");
-const roleMiddleware = require("../../middlewares/role.middleware");
-const validate = require("../../middlewares/validate.middleware");
-const { createOrderSchema } = require("./order.validation");
-
-
+// Specific routes FIRST (before generic ones)
 router.post(
   "/",
   authMiddleware,
-  roleMiddleware("USER"),
+  roleMiddleware("CUSTOMER"),
   validate(createOrderSchema),
   orderController.createOrder
 );
@@ -19,10 +19,31 @@ router.post(
 router.get(
   "/my-orders",
   authMiddleware,
-  roleMiddleware("USER"),
+  roleMiddleware("CUSTOMER"),
   orderController.getMyOrders
 );
 
+router.patch("/:id/cancel",
+  authMiddleware,
+  orderController.cancelOrder
+);
+
+router.get(
+  "/status",
+  authMiddleware,
+  roleMiddleware("ADMIN"),
+  orderController.getOrdersByStatus
+);
+
+router.put(
+  "/status/:orderId",
+  authMiddleware,
+  roleMiddleware("ADMIN"),
+  validate(updateOrderStatusSchema),
+  orderController.updateStatus
+);
+
+// Generic route LAST (to avoid conflicts)
 router.get(
   "/",
   authMiddleware,
@@ -30,4 +51,4 @@ router.get(
   orderController.getAllOrders
 );
 
-module.exports = router;
+export default router;

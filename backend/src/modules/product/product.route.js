@@ -3,7 +3,7 @@ import authMiddleware from "../../middleware/auth.middleware.js";
 import roleMiddleware from "../../middleware/role.middleware.js";
 import validate from "../../middleware/validate.middleware.js";
 import * as controller from "./product.controller.js";
-import { createProductSchema } from "./product.validator.js";
+import { createProductSchema, updateProductSchema } from "./product.validator.js";
 
 const router = express.Router();
 
@@ -17,9 +17,9 @@ router.get("/:id", controller.getProduct);
 
 router.post(
   "/",
-  validate(createProductSchema),
   authMiddleware,
   roleMiddleware("ADMIN"),
+  validate(createProductSchema),
   controller.createProduct
 );
 
@@ -27,6 +27,7 @@ router.put(
   "/:id",
   authMiddleware,
   roleMiddleware("ADMIN"),
+  validate(updateProductSchema),
   controller.updateProduct
 );
 

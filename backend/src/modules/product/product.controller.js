@@ -1,66 +1,80 @@
 import * as productService from "./product.service.js";
 
-
-
 // ADMIN
-export const createProduct = async (req,res)=>{
+export const createProduct = async (req, res, next) => {
+  try {
+    const product = await productService.createProduct(req.body);
 
-  const product =
-    await productService.createProduct(req.body);
-
-  res.status(201).json(product);
-};
-
-
-// PUBLIC
-export const getProducts = async (req,res)=>{
-
-  const products =
-    await productService.getAllProducts();
-
-  res.json(products);
-};
-
-
-// PUBLIC
-export const getProduct = async (req,res)=>{
-
-  const product =
-    await productService.getProductById(
-      req.params.id
-    );
-
-  if(!product){
-    return res.status(404).json({
-      message:"Product not found"
+    res.status(201).json({
+      success: true,
+      data: product
     });
+
+  } catch (error) {
+    next(error);
   }
-
-  res.json(product);
 };
+// PUBLIC
+export const getProducts = async (req, res, next) => {
+  try {
+    const keyword = req.query.keyword;
+    const category = req.query.category;
+    const minPrice = req.query.minPrice;
+    const maxPrice = req.query.maxPrice;
 
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 10;
 
-// ADMIN
-export const updateProduct = async (req,res)=>{
-
-  const product =
-    await productService.updateProduct(
-      req.params.id,
-      req.body
+    const result = await productService.getAllProducts(
+      keyword,
+      category,
+      minPrice,
+      maxPrice,
+      page,
+      limit,
     );
 
-  res.json(product);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
 };
 
+// PUBLIC
+export const getProduct = async (req, res, next) => {
+  try {
+    const product = await productService.getProductById(req.params.id);
+
+    if (!product) {
+      const error = new Error("Product not found");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    res.json({ success: true, data: product });
+  } catch (error) {
+    next(error);
+  }
+};
 
 // ADMIN
-export const deleteProduct = async (req,res)=>{
+export const updateProduct = async (req, res, next) => {
+  try {
+    const product = await productService.updateProduct(req.params.id, req.body);
 
-  await productService.deleteProduct(
-    req.params.id
-  );
+    res.json({ success: true, data: product });
+  } catch (error) {
+    next(error);
+  }
+};
 
-  res.json({
-    message:"Product deleted"
-  });
+// ADMIN
+export const deleteProduct = async (req, res, next) => {
+  try {
+    await productService.deleteProduct(req.params.id);
+
+    res.json({ success: true, message: "Product deleted" });
+  } catch (error) {
+    next(error);
+  }
 };

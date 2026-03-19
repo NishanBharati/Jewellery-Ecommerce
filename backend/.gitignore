@@ -1,5 +1,6 @@
 node_modules
-# Keep environment variables out of version control
 .env
+PROJECT_ANALYSIS.md
+RENDER_DEPLOYMENT_GUIDE.md
 
 /src/generated/prisma
