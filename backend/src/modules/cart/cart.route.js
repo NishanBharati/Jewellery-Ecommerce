@@ -1,24 +1,82 @@
 import express from "express";
-import * as controller from "./cart.controller.js";
+import * as cartController from "./cart.controller.js";
 import authMiddleware from "../../middleware/auth.middleware.js";
 import validate from "../../middleware/validate.middleware.js";
 import { addToCartSchema, updateCartItemSchema } from "./cart.validator.js";
 
 const router = express.Router();
 
-// Get cart
-router.get("/", authMiddleware, controller.getCart);
+/**
+ * @swagger
+ * tags:
+ *   name: Cart
+ *   description: Shopping cart APIs
+ */
 
-// Add to cart with validation
-router.post("/", authMiddleware, validate(addToCartSchema), controller.addToCart);
+/**
+ * @swagger
+ * /cart:
+ *   get:
+ *     summary: Get user cart
+ *     tags: [Cart]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Cart retrieved successfully
+ */
+router.get("/", authMiddleware, cartController.getCart);
 
-// Update cart item with validation
-router.put("/:id", authMiddleware, validate(updateCartItemSchema), controller.updateCartItem);
+/**
+ * @swagger
+ * /cart:
+ *   post:
+ *     summary: Add item to cart
+ *     tags: [Cart]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CartItem'
+ *     responses:
+ *       201:
+ *         description: Item added
+ */
+router.post("/", authMiddleware, validate(addToCartSchema), cartController.addToCart);
 
-// Remove item from cart
-router.delete("/:id", authMiddleware, controller.removeCartItem);
+/**
+ * @swagger
+ * /cart/{id}:
+ *   put:
+ *     summary: Update cart item
+ *     tags: [Cart]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.put("/:id", authMiddleware, validate(updateCartItemSchema), cartController.updateCartItem);
 
-// Clear entire cart
-router.delete("/", authMiddleware, controller.clearCart);
+/**
+ * @swagger
+ * /cart/{id}:
+ *   delete:
+ *     summary: Remove cart item
+ *     tags: [Cart]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.delete("/:id", authMiddleware, cartController.removeCartItem);
+
+/**
+ * @swagger
+ * /cart:
+ *   delete:
+ *     summary: Clear cart
+ *     tags: [Cart]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.delete("/", authMiddleware, cartController.clearCart);
 
 export default router;

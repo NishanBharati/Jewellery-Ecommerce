@@ -1,80 +1,93 @@
 import * as productService from "./product.service.js";
+import { uploadMultipleFiles } from "../../utils/uploadHelper.js";
 
-// ADMIN
 export const createProduct = async (req, res, next) => {
   try {
-    const product = await productService.createProduct(req.body);
+    // Convert string form data to proper types
+    const data = {
+      ...req.body,
+      price: parseFloat(req.body.price),
+      stock: parseInt(req.body.stock, 10),
+      isFeatured: req.body.isFeatured === 'true' || req.body.isFeatured === true,
+    };
+
+    const imageUrls = await uploadMultipleFiles(req.files);
+
+    const product = await productService.createProduct(
+      data,
+      imageUrls
+    );
 
     res.status(201).json({
       success: true,
-      data: product
+      message: "Product created",
+      data: product,
     });
-
-  } catch (error) {
-    next(error);
+  } catch (err) {
+    next(err);
   }
 };
-// PUBLIC
+
+// ✅ USE SEARCH FUNCTION ONLY (remove old getAllProducts)
 export const getProducts = async (req, res, next) => {
   try {
-    const keyword = req.query.keyword;
-    const category = req.query.category;
-    const minPrice = req.query.minPrice;
-    const maxPrice = req.query.maxPrice;
+    const result = await productService.searchProducts(req.query);
 
-    const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 10;
-
-    const result = await productService.getAllProducts(
-      keyword,
-      category,
-      minPrice,
-      maxPrice,
-      page,
-      limit,
-    );
-
-    res.json({ success: true, ...result });
-  } catch (error) {
-    next(error);
+    res.json({
+      success: true,
+      data: result.products,
+      pagination: {
+        page: result.page,
+        limit: result.limit,
+        total: result.total,
+        totalPages: result.totalPages,
+      },
+    });
+  } catch (err) {
+    next(err);
   }
 };
 
-// PUBLIC
 export const getProduct = async (req, res, next) => {
   try {
     const product = await productService.getProductById(req.params.id);
 
-    if (!product) {
-      const error = new Error("Product not found");
-      error.statusCode = 404;
-      throw error;
-    }
-
     res.json({ success: true, data: product });
-  } catch (error) {
-    next(error);
+  } catch (err) {
+    next(err);
   }
 };
 
-// ADMIN
 export const updateProduct = async (req, res, next) => {
   try {
-    const product = await productService.updateProduct(req.params.id, req.body);
+    // Convert string form data to proper types
+    const data = { ...req.body };
+    
+    // Only convert if the values are provided
+    if (data.price !== undefined) data.price = parseFloat(data.price);
+    if (data.stock !== undefined) data.stock = parseInt(data.stock, 10);
+    if (data.isFeatured !== undefined) data.isFeatured = data.isFeatured === 'true' || data.isFeatured === true;
+
+    const product = await productService.updateProduct(
+      req.params.id,
+      data
+    );
 
     res.json({ success: true, data: product });
-  } catch (error) {
-    next(error);
+  } catch (err) {
+    next(err);
   }
 };
 
-// ADMIN
 export const deleteProduct = async (req, res, next) => {
   try {
     await productService.deleteProduct(req.params.id);
 
-    res.json({ success: true, message: "Product deleted" });
-  } catch (error) {
-    next(error);
+    res.json({
+      success: true,
+      message: "Product deactivated",
+    });
+  } catch (err) {
+    next(err);
   }
 };

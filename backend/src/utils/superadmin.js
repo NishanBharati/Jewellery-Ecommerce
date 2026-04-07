@@ -22,6 +22,16 @@ const initSuperAdmin = async () => {
         console.log(" Super admin already exists:", email);
         return;
       }
+
+      await prisma.user.update({
+        where: { email },
+        data: {
+          role: "ADMIN",
+          isVerified: true,
+        },
+      });
+      console.log(" Super admin role updated:", email);
+      return;
     }
 
     const hashedPassword = await hashPassword(password);

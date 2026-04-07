@@ -25,12 +25,12 @@ model User {
   fullName  String
   email     String   @unique
   password  String
-  role Role @default(CUSTOMER)
+  role      Role     @default(CUSTOMER)
 
   otp       String?
   otpExpiry DateTime?
 
-  isVerified      Boolean  @default(false)
+  isVerified Boolean @default(false)
 
   resetToken String?
   resetTokenExpiry DateTime?
@@ -38,66 +38,17 @@ model User {
   refreshToken String?
   refreshTokenExpiry DateTime?
 
-
-  orders    Order[]
-  carts     Cart[]
+  profile       Profile?  
+  orders        Order[]
+  cart          Cart?   
+  wishlistItems WishlistItem[]  
+  blogs         Blog[]  
+  reviews       Review[]
+  addresses     Address[]  
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
-
-
-
-
-model Product {
-  id String @id @default(uuid())
-  name String
-  slug String @unique
-  description String
-  price Float
-  stock Int
-  brand String?
-  images String[]
-  isFeatured Boolean @default(false)
-
-  categoryId  String
-  category    Category @relation(fields: [categoryId], references: [id])
-  
-  orderItems OrderItem[]
-  cartItems  CartItem[]
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-
-model Order {
-  id          String   @id @default(uuid())
-  userId      String
-  totalAmount Float
-  
-  paymentMethod String
-  paymentStatus String  @default("PENDING")
-
-  status      String   @default("PENDING")
-  createdAt   DateTime @default(now())
-
-  user        User     @relation(fields: [userId], references: [id])
-  items       OrderItem[]
-}
-
-model OrderItem {
-  id        String  @id @default(uuid())
-  orderId   String
-  productId String
-  quantity  Int
-  price     Float   
-
-  order     Order   @relation(fields: [orderId], references: [id])
-  product   Product @relation(fields: [productId], references: [id])
-}
-
-
 
 model Category {
   id        String    @id @default(uuid())
@@ -110,22 +61,242 @@ model Category {
 }
 
 
+model Attribute {
+  id        String   @id @default(uuid())
+
+  productId String   @unique
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  material       String?
+  purity         String?
+  weight         Float?
+
+  gemstoneType   String?
+  gemstoneWeight Float?
+  gemstoneColor  String?
+
+  size           String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String
+  price       Float
+  discountPrice Float?
+  stock       Int
+  brand       String?
+  sku         String?  @unique
+
+  images      String[]
+  tags        String[]
+
+  isFeatured  Boolean  @default(false)
+  isActive    Boolean  @default(true)
+
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+
+  attribute       Attribute?   
+  wishlistItems   WishlistItem[] 
+  collectionItems CollectionItem[]  
+  reviews         Review[]
+
+  averageRating   Float   @default(0)
+  reviewCount     Int     @default(0)
+
+  orderItems  OrderItem[]
+  cartItems   CartItem[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([price])
+  @@index([categoryId])
+  @@index([isFeatured])
+}
+
+model Order {
+  id            String   @id @default(uuid())
+  userId        String
+  totalAmount   Float
+
+  paymentMethod String
+  paymentStatus Status   @default(PENDING)
+
+  status        Status   @default(PENDING)
+
+  addressId String?
+  address   Address? @relation(fields: [addressId], references: [id])
+
+  createdAt     DateTime @default(now())
+
+  user          User     @relation(fields: [userId], references: [id])
+  items         OrderItem[]
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  productId String
+
+  quantity  Int
+  price     Float
+
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+
+
+
 model Cart {
-  id        String     @id @default(uuid())
-  userId    String
-  user      User       @relation(fields: [userId], references: [id])
+  id        String   @id @default(uuid())
+
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   items     CartItem[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model CartItem {
   id        String   @id @default(uuid())
+
   cartId    String
-  cart      Cart     @relation(fields: [cartId], references: [id])
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
 
   productId String
-  product   Product  @relation(fields: [productId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   quantity  Int
 }
+
+model WishlistItem {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+}
+
+
+model Collection {
+  id          String           @id @default(uuid())
+  name        String
+  slug        String           @unique
+  description String?
+  image       String?
+  isActive    Boolean          @default(true)
+  items       CollectionItem[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model CollectionItem {
+  id           String     @id @default(uuid())
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sortOrder    Int        @default(0)
+  createdAt    DateTime   @default(now())
+
+  @@unique([collectionId, productId])
+}
+
+
+
+model Blog {
+  id          String    @id @default(uuid())
+  title       String
+  slug        String    @unique
+  content     String    
+  excerpt     String?
+  images      String[]
+  
+  isPublished Boolean   @default(false)
+  publishedAt DateTime? 
+
+  metaTitle       String?
+  metaDescription String?
+
+  authorId    String?
+  author      User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  readTime    Int?      
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Address {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName  String
+  phone     String
+  country   String   @default("Nepal")
+  state     String
+  city      String
+  area      String?
+  zipCode   String?
+  isDefault Boolean  @default(false)
+  
+  orders    Order[]  
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+
+model Profile {
+  id          String    @id @default(uuid())
+  userId      String    @unique
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  phone       String?
+  avatar      String?
+  images      String[]
+  dateOfBirth DateTime?
+  gender      Gender?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+
+model Review {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  rating     Int      // 1 to 5
+  comment    String?
+  images     String[] 
+  isVerified Boolean  @default(false) 
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, productId])
+}
+
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+

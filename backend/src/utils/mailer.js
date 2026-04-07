@@ -13,11 +13,11 @@ const transporter = nodemailer.createTransport({
 export const SendEmailVerificationCode = async (email, verificationCode) => {
   try {
     const info = await transporter.sendMail({
-      from: `"Jewellery Store" <${process.env.EMAIL_USER}>`, // sender address
-      to: email, // list of receivers
-      subject: "Verify your email", // Subject line
-      text: `Your verification code is: ${verificationCode}`, // plain text body
-      html: `<p>Your verification code is: <strong>${verificationCode}</strong></p>`, // html body
+      from: `"Jewellery Store" <${process.env.EMAIL_USER}>`, 
+      to: email, 
+      subject: "Verify your email", 
+      text: `Your verification code is: ${verificationCode}`, 
+      html: `<p>Your verification code is: <strong>${verificationCode}</strong></p>`, 
     });
     console.log("Email Send Successfully", info);
     return info;
@@ -26,8 +26,6 @@ export const SendEmailVerificationCode = async (email, verificationCode) => {
     throw error;
   }
 };
-
-
 
 export const SendPasswordResetEmail = async (email, otp) => {
   await transporter.sendMail({

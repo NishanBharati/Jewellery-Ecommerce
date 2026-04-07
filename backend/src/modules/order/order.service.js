@@ -1,134 +1,150 @@
 import prisma from "../../config/db.js";
+import { ApiError } from "../../utils/apiError.js";
 
-export const createOrder = async (userId, items, paymentMethod = "CASH") => {
-  try {
-    // Step 1: Check all products exist and have enough stock
+export const createOrderFromCart = async (userId, paymentMethod = "CASH", addressId = null) => {
+  return await prisma.$transaction(async (tx) => {
+
+    const cart = await tx.cart.findUnique({
+      where: { userId },
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+      },
+    });
+
+    if (!cart || cart.items.length === 0) {
+      throw new ApiError(400, "Cart is empty");
+    }
+
     let totalAmount = 0;
-    const orderItems = [];
+    const orderItemsData = [];
 
-    for (let item of items) {
-      const product = await prisma.product.findUnique({
-        where: { id: item.productId },
-      });
+    for (let item of cart.items) {
+      const product = item.product;
 
-      if (!product) {
-        throw new Error("Product not found");
-      }
+      if (!product) throw new ApiError(404, "Product not found");
 
       if (product.stock < item.quantity) {
-        throw new Error(`Not enough stock for ${product.name}`);
+        throw new ApiError(400, `Not enough stock for ${product.name}`);
       }
 
-      const itemTotal = product.price * item.quantity;
-      totalAmount += itemTotal;
+      totalAmount += product.price * item.quantity;
 
-      orderItems.push({
+      orderItemsData.push({
         productId: product.id,
         quantity: item.quantity,
         price: product.price,
       });
     }
 
-    // Step 2: Create order and update stock together (all or nothing)
-    const order = await prisma.order.create({
+    const order = await tx.order.create({
       data: {
-        userId: userId,
-        totalAmount: totalAmount,
-        paymentMethod: paymentMethod,
+        userId,
+        totalAmount,
+        paymentMethod,
         paymentStatus: "PENDING",
+        status: "PENDING",
+        ...(addressId && { addressId }),
         items: {
-          create: orderItems,
+          create: orderItemsData,
         },
       },
       include: {
-        items: true,
+        items: {
+          include: { product: true },
+        },
+        address: true,
       },
     });
 
-    // Step 3: Update stock for each product AFTER order is created
-    for (let item of orderItems) {
-      await prisma.product.update({
+    for (let item of orderItemsData) {
+      await tx.product.update({
         where: { id: item.productId },
-        data: { stock: { decrement: item.quantity } },
+        data: {
+          stock: {
+            decrement: item.quantity,
+          },
+        },
       });
     }
 
+    await tx.cartItem.deleteMany({
+      where: { cartId: cart.id },
+    });
+
     return order;
-  } catch (error) {
-    // If any error happens, order is not created at all
-    throw error;
-  }
+  });
 };
 
 export const getMyOrders = async (userId) => {
-  return await prisma.order.findMany({
+  return prisma.order.findMany({
     where: { userId },
     include: { items: true },
+    orderBy: { createdAt: "desc" },
   });
 };
 
 export const getAllOrders = async () => {
-  return await prisma.order.findMany({
+  return prisma.order.findMany({
     include: { items: true, user: true },
+    orderBy: { createdAt: "desc" },
   });
 };
 
 export const cancelOrder = async (orderId, userId, userRole) => {
-  const order = await prisma.order.findUnique({ 
-    where: { id: orderId },
-    include: { items: true }
-  });
-  if (!order) throw new Error("Order not found");
+  return prisma.$transaction(async (tx) => {
 
-  // Customer can only cancel their own orders
-  if (userRole === "CUSTOMER" && order.userId !== userId) {
-    const err = new Error("Not authorized");
-    err.statusCode = 403;
-    throw err;
-  }
-
-  // Can only cancel PENDING or CONFIRMED orders
-  if (!["PENDING", "CONFIRMED"].includes(order.status)) {
-    throw new Error("Order cannot be cancelled at this stage");
-  }
-
-  // Restore stock for each product
-  for (let item of order.items) {
-    await prisma.product.update({
-      where: { id: item.productId },
-      data: { stock: { increment: item.quantity } }
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
     });
-  }
 
-  return prisma.order.update({
-    where: { id: orderId },
-    data: { status: "CANCELLED" },
+    if (!order) throw new ApiError(404, "Order not found");
+
+    if (userRole === "CUSTOMER" && order.userId !== userId) {
+      throw new ApiError(403, "Not authorized");
+    }
+
+    if (!["PENDING", "CONFIRMED"].includes(order.status)) {
+      throw new ApiError(400, "Order cannot be cancelled");
+    }
+
+    for (let item of order.items) {
+      await tx.product.update({
+        where: { id: item.productId },
+        data: {
+          stock: {
+            increment: item.quantity,
+          },
+        },
+      });
+    }
+
+    return tx.order.update({
+      where: { id: orderId },
+      data: { status: "CANCELLED" },
+    });
   });
 };
 
 export const updateOrderStatus = async (orderId, status) => {
   return prisma.order.update({
     where: { id: orderId },
-    data: {
-      status: status,
-    },
+    data: { status },
   });
 };
 
-// GET ORDERS BY STATUS
 export const getOrdersByStatus = async (status) => {
-  // Check if status is provided
   if (!status) {
-    throw new Error("Status parameter is required");
+    throw new ApiError(400, "Status parameter is required");
   }
 
   return prisma.order.findMany({
-    where: {
-      status: status,
-    },
-    include: {
-      items: true,
-      user: true,
-    },
+    where: { status },
+    include: { items: true, user: true },
+    orderBy: { createdAt: "desc" },
   });
 };

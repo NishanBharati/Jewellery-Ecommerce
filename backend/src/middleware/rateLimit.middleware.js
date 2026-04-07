@@ -1,6 +1,5 @@
 import rateLimit from "express-rate-limit";
 
-// Login-specific rate limiter
 export const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5, 
@@ -10,7 +9,6 @@ export const loginLimiter = rateLimit({
   },
 });
 
-// Global rate limiter (general API protection)
 export const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,

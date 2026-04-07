@@ -1,34 +1,51 @@
 import prisma from "../../config/db.js";
 
-// Helper to calculate cart totals
+const getOrCreateCart = async (userId) => {
+  let cart = await prisma.cart.findUnique({
+    where: { userId }
+  });
+
+  if (!cart) {
+    cart = await prisma.cart.create({
+      data: { userId }
+    });
+  }
+
+  return cart;
+};
+
 const calculateCartTotal = (items) => {
   let totalPrice = 0;
   let totalItems = 0;
-  
+
   items.forEach(item => {
     totalPrice += item.product.price * item.quantity;
     totalItems += item.quantity;
   });
-  
+
   return { totalPrice, totalItems };
 };
 
 export const getCart = async (userId) => {
-  let cart = await prisma.cart.findFirst({
-    where:{ userId },
-    include:{ items:{ include:{ product:true } } }
+
+  const cart = await prisma.cart.findUnique({
+    where: { userId },
+    include: {
+      items: {
+        include: { product: true }
+      }
+    }
+  }) || await prisma.cart.create({
+    data: { userId },
+    include: {
+      items: {
+        include: { product: true }
+      }
+    }
   });
 
-  if(!cart){
-    cart = await prisma.cart.create({
-      data:{ userId },
-      include:{ items:{ include:{ product:true } } }
-    });
-  }
-
-  // Add cart summary
   const { totalPrice, totalItems } = calculateCartTotal(cart.items);
-  
+
   return {
     success: true,
     data: {
@@ -42,7 +59,7 @@ export const getCart = async (userId) => {
 };
 
 export const addToCart = async (userId, productId, quantity) => {
-  // Check if product exists
+
   const product = await prisma.product.findUnique({
     where: { id: productId }
   });
@@ -53,60 +70,52 @@ export const addToCart = async (userId, productId, quantity) => {
     throw error;
   }
 
-  // Check stock
   if (product.stock < quantity) {
     const error = new Error(`Not enough stock. Available: ${product.stock}`);
     error.statusCode = 400;
     throw error;
   }
 
-  let cart = await prisma.cart.findFirst({
-    where:{ userId }
-  });
-
-  if(!cart){
-    cart = await prisma.cart.create({ data:{ userId }});
-  }
+  const cart = await getOrCreateCart(userId);
 
   const existing = await prisma.cartItem.findFirst({
-    where:{
-      cartId:cart.id,
+    where: {
+      cartId: cart.id,
       productId
     }
   });
 
-  if(existing){
+  if (existing) {
     const newQuantity = existing.quantity + quantity;
-    
-    // Check stock for updated quantity
+
     if (product.stock < newQuantity) {
-      const error = new Error(`Not enough stock for total quantity. Available: ${product.stock}`);
+      const error = new Error(`Not enough stock. Available: ${product.stock}`);
       error.statusCode = 400;
       throw error;
     }
-    
+
     return prisma.cartItem.update({
-      where:{ id:existing.id },
-      data:{ quantity: newQuantity },
-      include:{ product:true }
+      where: { id: existing.id },
+      data: { quantity: newQuantity },
+      include: { product: true }
     });
   }
 
   return prisma.cartItem.create({
-    data:{
-      cartId:cart.id,
+    data: {
+      cartId: cart.id,
       productId,
       quantity
     },
-    include:{ product:true }
+    include: { product: true }
   });
 };
 
 export const updateQuantity = async (itemId, quantity) => {
-  // Get item with product info
+
   const item = await prisma.cartItem.findUnique({
-    where:{ id:itemId },
-    include:{ product:true }
+    where: { id: itemId },
+    include: { product: true }
   });
 
   if (!item) {
@@ -115,7 +124,6 @@ export const updateQuantity = async (itemId, quantity) => {
     throw error;
   }
 
-  // Check stock
   if (item.product.stock < quantity) {
     const error = new Error(`Not enough stock. Available: ${item.product.stock}`);
     error.statusCode = 400;
@@ -123,15 +131,16 @@ export const updateQuantity = async (itemId, quantity) => {
   }
 
   return prisma.cartItem.update({
-    where:{ id:itemId },
-    data:{ quantity },
-    include:{ product:true }
+    where: { id: itemId },
+    data: { quantity },
+    include: { product: true }
   });
 };
 
 export const removeItem = async (itemId) => {
+
   const item = await prisma.cartItem.findUnique({
-    where:{ id:itemId }
+    where: { id: itemId }
   });
 
   if (!item) {
@@ -141,13 +150,14 @@ export const removeItem = async (itemId) => {
   }
 
   return prisma.cartItem.delete({
-    where:{ id:itemId }
+    where: { id: itemId }
   });
 };
 
-export const clearCart = async (cartId) => {
+export const clearCart = async (userId) => {
+
   const cart = await prisma.cart.findUnique({
-    where:{ id:cartId }
+    where: { userId }
   });
 
   if (!cart) {
@@ -157,6 +167,6 @@ export const clearCart = async (cartId) => {
   }
 
   return prisma.cartItem.deleteMany({
-    where:{ cartId }
+    where: { cartId: cart.id }
   });
 };

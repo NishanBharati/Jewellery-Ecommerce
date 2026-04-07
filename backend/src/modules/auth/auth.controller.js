@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
-import prisma from "../config/db.js";
+import prisma from "../../config/db.js";
 import {
   signupService,
   loginService,
@@ -8,15 +8,13 @@ import {
   resendOtpService,
   forgotPasswordService,
   resetPasswordService,
-} from "../services/auth.service.js";
-import { generateTokens } from "../utils/jwt.js";
+} from "./auth.service.js";
+import { generateTokens } from "../../utils/jwt.js";
 import {
   hashRefreshToken,
   generateRefreshTokenExpiry,
-} from "../utils/auth.helpers.js";
+} from "../../utils/auth.helpers.js";
 
-
-// ===================== SIGNUP =====================
 export const signup = async (req, res, next) => {
   try {
     const { fullName, email, password } = req.body;
@@ -24,8 +22,10 @@ export const signup = async (req, res, next) => {
     const user = await signupService({ fullName, email, password });
 
     return res.status(201).json({
+      success: true,
+      statusCode: 201,
       message: "User created. Please verify your email.",
-      user,
+      data: user,
     });
 
   } catch (error) {
@@ -33,8 +33,6 @@ export const signup = async (req, res, next) => {
   }
 };
 
-
-// ===================== LOGIN =====================
 export const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -42,10 +40,14 @@ export const login = async (req, res, next) => {
     const result = await loginService({ email, password });
 
     return res.status(200).json({
+      success: true,
+      statusCode: 200,
       message: "Login successful",
-      user: result.user,
-      accessToken: result.tokens.accessToken,
-      refreshToken: result.tokens.refreshToken,
+      data: {
+        user: result.user,
+        accessToken: result.tokens.accessToken,
+        refreshToken: result.tokens.refreshToken,
+      },
     });
 
   } catch (error) {
@@ -53,8 +55,6 @@ export const login = async (req, res, next) => {
   }
 };
 
-
-// ===================== VERIFY EMAIL =====================
 export const verifyEmail = async (req, res, next) => {
   try {
     const { email, otp } = req.body;
@@ -62,10 +62,14 @@ export const verifyEmail = async (req, res, next) => {
     const result = await verifyEmailService({ email, otp });
 
     return res.status(200).json({
+      success: true,
+      statusCode: 200,
       message: "Email verified successfully",
-      user: result.user,
-      accessToken: result.tokens.accessToken,
-      refreshToken: result.tokens.refreshToken,
+      data: {
+        user: result.user,
+        accessToken: result.tokens.accessToken,
+        refreshToken: result.tokens.refreshToken,
+      },
     });
 
   } catch (error) {
@@ -73,8 +77,6 @@ export const verifyEmail = async (req, res, next) => {
   }
 };
 
-
-// ===================== RESEND OTP =====================
 export const resendOtp = async (req, res, next) => {
   try {
     const { email } = req.body;
@@ -82,6 +84,8 @@ export const resendOtp = async (req, res, next) => {
     await resendOtpService(email);
 
     return res.status(200).json({
+      success: true,
+      statusCode: 200,
       message: "OTP resent successfully",
     });
 
@@ -90,8 +94,6 @@ export const resendOtp = async (req, res, next) => {
   }
 };
 
-
-// ===================== FORGOT PASSWORD =====================
 export const forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
@@ -99,6 +101,8 @@ export const forgotPassword = async (req, res, next) => {
     await forgotPasswordService(email);
 
     return res.status(200).json({
+      success: true,
+      statusCode: 200,
       message: "Password reset OTP sent to your email",
     });
 
@@ -107,8 +111,6 @@ export const forgotPassword = async (req, res, next) => {
   }
 };
 
-
-// ===================== RESET PASSWORD =====================
 export const resetPassword = async (req, res, next) => {
   try {
     const { email, otp, newPassword } = req.body;
@@ -116,6 +118,8 @@ export const resetPassword = async (req, res, next) => {
     await resetPasswordService({ email, otp, newPassword });
 
     return res.status(200).json({
+      success: true,
+      statusCode: 200,
       message: "Password reset successful",
     });
 
@@ -124,19 +128,15 @@ export const resetPassword = async (req, res, next) => {
   }
 };
 
-
-// ===================== REFRESH TOKEN =====================
 export const refreshToken = async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
 
-    // 1. Verify JWT signature
     const decoded = jwt.verify(
       refreshToken,
       process.env.JWT_REFRESH_SECRET
     );
 
-    // 2. Find user with current role
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
       select: {
@@ -153,21 +153,18 @@ export const refreshToken = async (req, res, next) => {
       throw error;
     }
 
-    // 3. Check if user has a refresh token stored
     if (!user.refreshToken) {
       const error = new Error("Refresh token not found");
       error.statusCode = 403;
       throw error;
     }
 
-    // 4. Check expiry
     if (user.refreshTokenExpiry < new Date()) {
       const error = new Error("Refresh token expired");
       error.statusCode = 403;
       throw error;
     }
 
-    // 5. Verify the token matches stored hash
     const isValid = await bcrypt.compare(refreshToken, user.refreshToken);
     if (!isValid) {
       const error = new Error("Invalid refresh token");
@@ -175,10 +172,8 @@ export const refreshToken = async (req, res, next) => {
       throw error;
     }
 
-    // 6. Generate new tokens (token rotation)
     const tokens = generateTokens(user);
 
-    // 7. Store new refresh token in database
     const hashedRefreshToken = await hashRefreshToken(tokens.refreshToken);
     const refreshTokenExpiry = generateRefreshTokenExpiry();
 
@@ -190,10 +185,14 @@ export const refreshToken = async (req, res, next) => {
       },
     });
 
-    // 8. Return new tokens
     return res.status(200).json({
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
+      success: true,
+      statusCode: 200,
+      message: "Token refreshed successfully",
+      data: {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      },
     });
 
   } catch (error) {
@@ -201,13 +200,10 @@ export const refreshToken = async (req, res, next) => {
   }
 };
 
-
-// ===================== LOGOUT =====================
 export const logout = async (req, res, next) => {
   try {
-    const userId = req.user.id; // From auth middleware
+    const userId = req.user.id; 
 
-    // Clear refresh token from database
     await prisma.user.update({
       where: { id: userId },
       data: {
@@ -217,6 +213,8 @@ export const logout = async (req, res, next) => {
     });
 
     return res.status(200).json({
+      success: true,
+      statusCode: 200,
       message: "Logout successful",
     });
   } catch (error) {

@@ -1,4 +1,5 @@
 import prisma from "../../config/db.js";
+import { ApiError } from "../../utils/apiError.js";
 
 const generateSlug = (name) => {
   return name
@@ -7,8 +8,6 @@ const generateSlug = (name) => {
     .replace(/\s+/g, "-");
 };
 
-
-// CREATE CATEGORY
 export const createCategory = async (data) => {
 
   const slug = generateSlug(data.name);
@@ -18,7 +17,7 @@ export const createCategory = async (data) => {
   });
 
   if (existing) {
-    throw new Error("Category already exists");
+    throw new ApiError(409, "Category already exists");
   }
 
   return prisma.category.create({
@@ -30,10 +29,8 @@ export const createCategory = async (data) => {
 
 };
 
-
-// GET ALL CATEGORIES WITH PAGINATION AND SEARCH
 export const getCategories = async (page = 1, limit = 10, search = "") => {
-  // Build filter for search
+
   let filter = {};
   if (search) {
     filter.name = {
@@ -42,10 +39,8 @@ export const getCategories = async (page = 1, limit = 10, search = "") => {
     };
   }
 
-  // Calculate pagination
   const skip = (page - 1) * limit;
 
-  // Get categories and total count
   const [categories, total] = await prisma.$transaction([
     prisma.category.findMany({
       where: filter,
@@ -65,8 +60,6 @@ export const getCategories = async (page = 1, limit = 10, search = "") => {
   };
 };
 
-
-// GET SINGLE CATEGORY
 export const getCategoryById = async (id) => {
 
   return prisma.category.findUnique({
@@ -76,8 +69,6 @@ export const getCategoryById = async (id) => {
 
 };
 
-
-// UPDATE CATEGORY
 export const updateCategory = async (id, data) => {
 
   const slug = generateSlug(data.name);
@@ -92,8 +83,6 @@ export const updateCategory = async (id, data) => {
 
 };
 
-
-// DELETE CATEGORY
 export const deleteCategory = async (id) => {
 
   const productCount = await prisma.product.count({
@@ -101,7 +90,7 @@ export const deleteCategory = async (id) => {
   });
 
   if (productCount > 0) {
-    throw new Error("Cannot delete category with products");
+    throw new ApiError(400, "Cannot delete category with products");
   }
 
   return prisma.category.delete({
@@ -110,8 +99,6 @@ export const deleteCategory = async (id) => {
 
 };
 
-
-// GET PRODUCTS BY CATEGORY
 export const getProductsByCategory = async (slug) => {
 
   return prisma.category.findUnique({

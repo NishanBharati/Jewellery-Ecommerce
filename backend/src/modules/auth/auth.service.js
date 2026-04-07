@@ -1,4 +1,5 @@
-import prisma from "../config/db.js";
+import prisma from "../../config/db.js";
+import { ApiError } from "../../utils/apiError.js";
 import {
   generateOtp,
   hashOtp,
@@ -7,19 +8,18 @@ import {
   verifyOtp,
   hashRefreshToken,
   generateRefreshTokenExpiry,
-} from "../utils/auth.helpers.js";
-import { generateTokens } from "../utils/jwt.js";
+} from "../../utils/auth.helpers.js";
+import { generateTokens } from "../../utils/jwt.js";
 import {
   SendEmailVerificationCode,
   SendPasswordResetEmail,
-} from "../utils/mailer.js";
+} from "../../utils/mailer.js";
 
-// ===================== SIGNUP =====================
 export const signupService = async (data) => {
   const { fullName, email, password } = data;
 
   const userExists = await prisma.user.findUnique({ where: { email } });
-  if (userExists) throw new Error("Email already exists");
+  if (userExists) throw new ApiError(409, "Email already exists");
 
   const hashedPassword = await hashPassword(password);
 
@@ -47,25 +47,21 @@ export const signupService = async (data) => {
   }
 };
 
-// ===================== LOGIN =====================
-export const loginService = async ({ email, password }) => 
-  {
+export const loginService = async ({ email, password }) => {
   const user = await prisma.user.findUnique({
-     where: { email }
-     });
+    where: { email }
+  });
 
-  // Generic error message to prevent user enumeration attacks
-  if (!user) throw new Error("Invalid email or password");
+  if (!user) throw new ApiError(401, "Invalid email or password");
 
   if (!user.isVerified)
-    throw new Error("Please verify your email before logging in");
+    throw new ApiError(403, "Please verify your email before logging in");
 
   const isMatch = await comparePassword(password, user.password);
-  if (!isMatch) throw new Error("Invalid email or password");  // Same generic message
+  if (!isMatch) throw new ApiError(401, "Invalid email or password");  
 
   const tokens = generateTokens(user);
 
-  // Hash and store refresh token in database
   const hashedRefreshToken = await hashRefreshToken(tokens.refreshToken);
   const refreshTokenExpiry = generateRefreshTokenExpiry();
 
@@ -80,24 +76,22 @@ export const loginService = async ({ email, password }) =>
   return { user, tokens };
 };
 
-// ===================== VERIFY EMAIL =====================
 export const verifyEmailService = async ({ email, otp }) => {
-  const user = await prisma.user.findUnique({ 
-    where: { email } 
+  const user = await prisma.user.findUnique({
+    where: { email }
   });
-  if (!user) throw new Error("User not found");
+  if (!user) throw new ApiError(404, "User not found");
 
-  if (user.isVerified) throw new Error("Email already verified");
+  if (user.isVerified) throw new ApiError(422, "Email already verified");
 
-  if (!user.otp || user.otpExpiry < new Date()) throw new Error("OTP expired");
+  if (!user.otp || user.otpExpiry < new Date()) throw new ApiError(422, "OTP expired");
 
   const isValid = await verifyOtp(otp, user.otp);
 
-  if (!isValid) throw new Error("Invalid OTP");
+  if (!isValid) throw new ApiError(422, "Invalid OTP");
 
   const tokens = generateTokens(user);
 
-  // Hash and store refresh token in database
   const hashedRefreshToken = await hashRefreshToken(tokens.refreshToken);
   const refreshTokenExpiry = generateRefreshTokenExpiry();
 
@@ -115,12 +109,11 @@ export const verifyEmailService = async ({ email, otp }) => {
   return { user: updatedUser, tokens };
 };
 
-// ===================== RESEND OTP =====================
 export const resendOtpService = async (email) => {
   const user = await prisma.user.findUnique({ where: { email } });
 
-  if (!user) throw new Error("User not found");
-  if (user.isVerified) throw new Error("Email already verified");
+  if (!user) throw new ApiError(404, "User not found");
+  if (user.isVerified) throw new ApiError(422, "Email already verified");
 
   const otp = generateOtp();
   const hashedOtp = await hashOtp(otp);
@@ -134,12 +127,11 @@ export const resendOtpService = async (email) => {
   await SendEmailVerificationCode(email, otp);
 };
 
-// ===================== FORGOT PASSWORD =====================
 export const forgotPasswordService = async (email) => {
   const user = await prisma.user.findUnique({
-     where: { email }
-     });
-  if (!user) throw new Error("User not found");
+    where: { email }
+  });
+  if (!user) throw new ApiError(404, "User not found");
 
   const otp = generateOtp();
   const hashedOtp = await hashOtp(otp);
@@ -153,16 +145,15 @@ export const forgotPasswordService = async (email) => {
   await SendPasswordResetEmail(email, otp);
 };
 
-// ===================== RESET PASSWORD =====================
 export const resetPasswordService = async ({ email, otp, newPassword }) => {
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) throw new Error("User not found");
+  if (!user) throw new ApiError(404, "User not found");
 
   if (!user.resetToken || user.resetTokenExpiry < new Date())
-    throw new Error("OTP expired");
+    throw new ApiError(422, "OTP expired");
 
   const isValid = await verifyOtp(otp, user.resetToken);
-  if (!isValid) throw new Error("Invalid OTP");
+  if (!isValid) throw new ApiError(422, "Invalid OTP");
 
   const hashedPassword = await hashPassword(newPassword);
 

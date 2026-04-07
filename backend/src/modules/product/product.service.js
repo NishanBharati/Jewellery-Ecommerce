@@ -1,157 +1,200 @@
 import prisma from "../../config/db.js";
+import { ApiError } from "../../utils/apiError.js";
 
-// Helper function to generate slug from name
-const generateSlug = (name) => {
-  return name
+// 🔧 SLUG GENERATOR
+const generateSlug = (name) =>
+  name
     .toLowerCase()
     .trim()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-};
+    .replace(/[^\w\s-]/g, "")
+    .replace(/[\s_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
-export const createProduct = async (data) => {
-  // Generate slug if not provided
+// ✅ CREATE PRODUCT
+export const createProduct = async (data, imageUrls = []) => {
   if (!data.slug) {
     data.slug = generateSlug(data.name);
   }
 
-  // Always check slug uniqueness (whether auto-generated or manually provided)
-  const existingProduct = await prisma.product.findUnique({
-    where: { slug: data.slug }
+  const existing = await prisma.product.findUnique({
+    where: { slug: data.slug },
   });
 
-  if (existingProduct) {
-    if (!data.slug.includes(generateSlug(data.name))) {
-      // Custom slug that conflicts — reject it clearly
-      const error = new Error(`Slug "${data.slug}" is already taken`);
-      error.statusCode = 400;
-      throw error;
-    }
-    // Auto-generated slug conflict — append timestamp to make it unique
+  if (existing) {
     data.slug = `${data.slug}-${Date.now()}`;
   }
 
-  return prisma.product.create({
-    data
+  if (imageUrls.length > 0) {
+    data.images = imageUrls;
+  }
+
+  const attributeData = data.attribute;
+  delete data.attribute;
+
+  return prisma.$transaction(async (tx) => {
+    const product = await tx.product.create({ data });
+
+    if (attributeData) {
+      await tx.attribute.create({
+        data: {
+          productId: product.id,
+          ...attributeData,
+        },
+      });
+    }
+
+    return tx.product.findUnique({
+      where: { id: product.id },
+      include: { attribute: true, category: true },
+    });
   });
 };
 
+export const searchProducts = async (params) => {
+  const {
+    keyword,
+    category,
+    minPrice,
+    maxPrice,
+    isFeatured,
+    inStock,
+    sort,
+    page = 1,
+    limit = 10,
+  } = params;
 
+  const filters = {
+    isActive: true, // ✅ ALWAYS filter active products
+  };
 
-export const getAllProducts = async (
-  keyword,
-  category,
-  minPrice,
-  maxPrice,
-  page,
-  limit
-) => {
-
-  let filter = {};
-
-  // SEARCH BY PRODUCT NAME
+  // 🔍 Search
   if (keyword) {
-    filter.name = {
-      contains: keyword,
-      mode: "insensitive"
-    };
+    filters.OR = [
+      { name: { contains: keyword, mode: "insensitive" } },
+      { description: { contains: keyword, mode: "insensitive" } },
+      { brand: { contains: keyword, mode: "insensitive" } },
+    ];
   }
 
-  // FILTER BY CATEGORY
+  // 📂 Category
   if (category) {
-    filter.category = category;
+    filters.categoryId = category;
   }
 
-  // FILTER BY PRICE RANGE
+  // 💰 Price
   if (minPrice || maxPrice) {
-    filter.price = {};
-
-    if (minPrice) {
-      filter.price.gte = Number(minPrice);
-    }
-
-    if (maxPrice) {
-      filter.price.lte = Number(maxPrice);
-    }
+    filters.price = {};
+    if (minPrice) filters.price.gte = Number(minPrice);
+    if (maxPrice) filters.price.lte = Number(maxPrice);
   }
 
-  // PAGINATION LOGIC
+  // ⭐ Featured
+  if (isFeatured !== undefined) {
+    filters.isFeatured = isFeatured === "true";
+  }
+
+  // 📦 Stock
+  if (inStock === "true") {
+    filters.stock = { gt: 0 };
+  }
+
+  // 🔄 SORTING
+  let orderBy = { createdAt: "desc" };
+
+  if (sort === "price_asc") orderBy = { price: "asc" };
+  if (sort === "price_desc") orderBy = { price: "desc" };
+  if (sort === "rating") orderBy = { averageRating: "desc" };
+
   const skip = (page - 1) * limit;
 
   const [products, total] = await prisma.$transaction([
     prisma.product.findMany({
-      where: filter,
+      where: filters,
       skip,
-      take: limit,
-      orderBy: { createdAt: "desc" }
+      take: Number(limit),
+      orderBy,
+      include: {
+        attribute: true,
+        category: true,
+      },
     }),
-    prisma.product.count({ where: filter })
+    prisma.product.count({ where: filters }),
   ]);
 
-  return { products, total, page, limit, totalPages: Math.ceil(total / limit) };
-
+  return {
+    products,
+    total,
+    page: Number(page),
+    limit: Number(limit),
+    totalPages: Math.ceil(total / limit),
+  };
 };
 
 export const getProductById = async (id) => {
-
-  return prisma.product.findUnique({
-    where:{ id }
+  const product = await prisma.product.findUnique({
+    where: { id },
+    include: { attribute: true, category: true },
   });
 
+  if (!product) throw new ApiError(404, "Product not found");
+
+  return product;
 };
+
 
 
 export const updateProduct = async (id, data) => {
-  const existing = await prisma.product.findUnique({ where: { id } });
-  if (!existing) {
-    const error = new Error("Product not found");
-    error.statusCode = 404;
-    throw error;
-  }
+  const existing = await prisma.product.findUnique({
+    where: { id },
+    include: { attribute: true },
+  });
 
-  // Regenerate slug if name is being updated and slug is not provided
+  if (!existing) throw new ApiError(404, "Product not found");
+
   if (data.name && !data.slug) {
     data.slug = generateSlug(data.name);
-    
-    // Ensure slug is unique
-    const existingProduct = await prisma.product.findFirst({
-      where: { 
-        slug: data.slug,
-        NOT: { id: id }
-      }
-    });
-    
-    if (existingProduct) {
-      data.slug = `${data.slug}-${Date.now()}`;
-    }
   }
 
-  return prisma.product.update({
-    where:{ id },
-    data
+  const attributeData = data.attribute;
+  delete data.attribute;
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.product.update({
+      where: { id },
+      data,
+    });
+
+    if (attributeData) {
+      if (existing.attribute) {
+        await tx.attribute.update({
+          where: { productId: id },
+          data: attributeData,
+        });
+      } else {
+        await tx.attribute.create({
+          data: { productId: id, ...attributeData },
+        });
+      }
+    }
+
+    return tx.product.findUnique({
+      where: { id },
+      include: { attribute: true },
+    });
   });
 };
+
 
 
 export const deleteProduct = async (id) => {
-  const existing = await prisma.product.findUnique({ where: { id } });
-  if (!existing) {
-    const error = new Error("Product not found");
-    error.statusCode = 404;
-    throw error;
-  }
+  const existing = await prisma.product.findUnique({
+    where: { id },
+  });
 
-  const orderItemCount = await prisma.orderItem.count({ where: { productId: id } });
-  if (orderItemCount > 0) {
-    const error = new Error("Cannot delete a product that has been ordered");
-    error.statusCode = 400;
-    throw error;
-  }
+  if (!existing) throw new ApiError(404, "Product not found");
 
-  return prisma.product.delete({
-    where: { id }
+  return prisma.product.update({
+    where: { id },
+    data: { isActive: false },
   });
 };
-
-

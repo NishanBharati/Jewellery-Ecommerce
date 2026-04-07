@@ -7,48 +7,77 @@ import { createOrderSchema, updateOrderStatusSchema } from "./order.validator.js
 
 const router = express.Router();
 
-// Specific routes FIRST (before generic ones)
-router.post(
-  "/",
-  authMiddleware,
-  roleMiddleware("CUSTOMER"),
-  validate(createOrderSchema),
-  orderController.createOrder
-);
+/**
+ * @swagger
+ * tags:
+ *   name: Orders
+ *   description: Order management APIs
+ */
 
-router.get(
-  "/my-orders",
-  authMiddleware,
-  roleMiddleware("CUSTOMER"),
-  orderController.getMyOrders
-);
+/**
+ * @swagger
+ * /orders:
+ *   post:
+ *     summary: Create order
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post("/", authMiddleware, roleMiddleware("CUSTOMER"), validate(createOrderSchema), orderController.createOrder);
 
-router.patch("/:id/cancel",
-  authMiddleware,
-  orderController.cancelOrder
-);
+/**
+ * @swagger
+ * /orders/my-orders:
+ *   get:
+ *     summary: Get my orders
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get("/my-orders", authMiddleware, roleMiddleware("CUSTOMER"), orderController.getMyOrders);
 
-router.get(
-  "/status",
-  authMiddleware,
-  roleMiddleware("ADMIN"),
-  orderController.getOrdersByStatus
-);
+/**
+ * @swagger
+ * /orders/{id}/cancel:
+ *   patch:
+ *     summary: Cancel order
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.patch("/:id/cancel", authMiddleware, orderController.cancelOrder);
 
-router.put(
-  "/status/:orderId",
-  authMiddleware,
-  roleMiddleware("ADMIN"),
-  validate(updateOrderStatusSchema),
-  orderController.updateStatus
-);
+/**
+ * @swagger
+ * /orders/status:
+ *   get:
+ *     summary: Get orders by status (Admin)
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get("/status", authMiddleware, roleMiddleware("ADMIN"), orderController.getOrdersByStatus);
 
-// Generic route LAST (to avoid conflicts)
-router.get(
-  "/",
-  authMiddleware,
-  roleMiddleware("ADMIN"),
-  orderController.getAllOrders
-);
+/**
+ * @swagger
+ * /orders/{id}/status:
+ *   put:
+ *     summary: Update order status (Admin)
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.put("/:id/status", authMiddleware, roleMiddleware("ADMIN"), validate(updateOrderStatusSchema), orderController.updateStatus);
+
+/**
+ * @swagger
+ * /orders:
+ *   get:
+ *     summary: Get all orders (Admin)
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get("/", authMiddleware, roleMiddleware("ADMIN"), orderController.getAllOrders);
 
 export default router;
